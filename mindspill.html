@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#121A16" />
+<title>MindSpill</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;1,9..144,400&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --paper:#121A16;
+    --surface:#1C2924;
+    --surface-2:#26342D;
+    --ink:#ECEFE8;
+    --forest:#5C9079;
+    --forest-soft:#6FA98E;
+    --muted:#8FA197;
+    --line:#2D3C34;
+    --gold:#D49A4E;
+
+    --todo:#E07A56;
+    --inspiration:#A593CC;
+    --plan:#5FA7BC;
+    --forward:#6FB587;
+    --win:#D9A24E;
+
+    --radius:18px;
+    --maxw:560px;
+  }
+
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--paper);
+    color:var(--ink);
+    font-family:"Inter",system-ui,-apple-system,sans-serif;
+    -webkit-font-smoothing:antialiased;
+    line-height:1.5;
+    min-height:100vh;
+  }
+  button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit;}
+  textarea{font-family:inherit;}
+  :focus-visible{outline:2px solid var(--forest);outline-offset:2px;border-radius:6px;}
+
+  .app{
+    max-width:var(--maxw);
+    margin:0 auto;
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+    padding-bottom:84px;
+  }
+
+  /* Top bar */
+  .topbar{
+    display:flex;align-items:baseline;justify-content:space-between;
+    padding:22px 22px 6px;
+  }
+  .wordmark{
+    font-family:"Fraunces",serif;
+    font-weight:500;
+    font-size:24px;
+    letter-spacing:0.2px;
+  }
+  .wordmark .drop{color:var(--forest);}
+  .topbar .hint{
+    font-family:"JetBrains Mono",monospace;
+    font-size:11px;color:var(--muted);letter-spacing:0.5px;
+  }
+
+  /* Views */
+  .view{display:none;flex:1;flex-direction:column;}
+  .view.active{display:flex;}
+
+  /* Capture */
+  .capture{
+    padding:18px 22px;
+    flex:1;
+    display:flex;
+    flex-direction:column;
+  }
+  .prompt{
+    font-family:"Fraunces",serif;
+    font-style:italic;
+    font-weight:400;
+    font-size:27px;
+    line-height:1.25;
+    color:var(--ink);
+    margin:18px 0 18px;
+    max-width:18ch;
+  }
+  .field{
+    background:var(--surface);
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    padding:16px;
+    flex:1;
+    display:flex;
+    flex-direction:column;
+    min-height:200px;
+  }
+  .field textarea{
+    background:transparent;border:none;resize:none;
+    width:100%;flex:1;
+    font-size:17px;line-height:1.55;color:var(--ink);
+  }
+  .field textarea::placeholder{color:#9AA89E;}
+  .field textarea:focus{outline:none;}
+  .interim{color:var(--muted);font-style:italic;}
+
+  .capture-actions{
+    display:flex;align-items:center;gap:14px;
+    padding-top:18px;
+  }
+  .mic{
+    width:64px;height:64px;border-radius:50%;
+    background:var(--forest);color:var(--surface);
+    display:flex;align-items:center;justify-content:center;
+    flex-shrink:0;transition:background .2s ease, transform .15s ease;
+    position:relative;
+  }
+  .mic svg{width:26px;height:26px;}
+  .mic:active{transform:scale(0.96);}
+  .mic.listening{background:var(--todo);}
+  .mic.listening::after{
+    content:"";position:absolute;inset:-8px;border-radius:50%;
+    border:2px solid var(--todo);opacity:.5;
+    animation:pulse 1.4s ease-out infinite;
+  }
+  @keyframes pulse{
+    0%{transform:scale(.85);opacity:.6;}
+    100%{transform:scale(1.25);opacity:0;}
+  }
+  .mic-label{
+    font-size:13px;color:var(--muted);
+    flex:1;
+  }
+  .mic-label strong{color:var(--ink);font-weight:600;display:block;font-size:14px;}
+  .save{
+    background:var(--ink);color:var(--surface);
+    padding:14px 22px;border-radius:30px;
+    font-size:15px;font-weight:600;
+    transition:opacity .2s ease, transform .15s ease;
+  }
+  .save:disabled{opacity:.3;}
+  .save:active{transform:scale(.97);}
+
+  .voice-note{
+    margin-top:14px;font-size:12.5px;color:var(--muted);
+    background:var(--surface-2);border-radius:12px;padding:10px 13px;
+    display:none;
+  }
+  .voice-note.show{display:block;}
+
+  /* Stream */
+  .stream{padding:14px 18px 0;flex:1;}
+  .stream-head{
+    display:flex;align-items:baseline;gap:10px;padding:6px 4px 12px;
+  }
+  .stream-head h2{
+    font-family:"Fraunces",serif;font-weight:500;font-size:21px;margin:0;
+  }
+  .stream-head .count{font-family:"JetBrains Mono",monospace;font-size:12px;color:var(--muted);}
+
+  .chips{
+    display:flex;gap:8px;overflow-x:auto;padding:0 4px 14px;
+    scrollbar-width:none;
+  }
+  .chips::-webkit-scrollbar{display:none;}
+  .chip{
+    flex-shrink:0;
+    border:1px solid var(--line);
+    background:var(--surface);
+    border-radius:30px;padding:7px 13px;
+    font-size:13px;color:var(--muted);
+    display:flex;align-items:center;gap:6px;white-space:nowrap;
+  }
+  .chip .dot{width:8px;height:8px;border-radius:50%;}
+  .chip.active{background:var(--ink);color:var(--surface);border-color:var(--ink);}
+
+  .cards{display:flex;flex-direction:column;gap:12px;padding:0 4px 24px;}
+  .card{
+    background:var(--surface);
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    padding:15px 16px;
+    animation:settle .4s ease both;
+  }
+  @keyframes settle{
+    from{opacity:0;transform:translateY(8px);}
+    to{opacity:1;transform:translateY(0);}
+  }
+  .card .meta{
+    font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--muted);
+    margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;
+  }
+  .card .text{font-size:16px;line-height:1.5;color:var(--ink);white-space:pre-wrap;word-break:break-word;}
+  .card.done .text{color:var(--muted);text-decoration:line-through;}
+  .card .row{display:flex;align-items:center;justify-content:space-between;margin-top:12px;gap:10px;}
+  .tag{
+    display:inline-flex;align-items:center;gap:7px;
+    font-size:13px;font-weight:500;
+    border-radius:30px;padding:6px 12px;
+    background:var(--surface-2);color:var(--muted);
+  }
+  .tag .dot{width:9px;height:9px;border-radius:50%;background:var(--muted);}
+  .card .actions{display:flex;gap:6px;}
+  .iconbtn{
+    width:34px;height:34px;border-radius:10px;
+    display:flex;align-items:center;justify-content:center;
+    color:var(--muted);background:var(--surface-2);
+  }
+  .iconbtn svg{width:17px;height:17px;}
+
+  .empty{
+    text-align:center;padding:60px 30px;color:var(--muted);
+  }
+  .empty .big{
+    font-family:"Fraunces",serif;font-style:italic;font-size:22px;color:var(--ink);
+    margin-bottom:8px;
+  }
+
+  /* Bottom nav */
+  .nav{
+    position:fixed;bottom:0;left:0;right:0;
+    background:rgba(18,26,22,.92);
+    backdrop-filter:blur(10px);
+    border-top:1px solid var(--line);
+    display:flex;justify-content:center;gap:8px;
+    padding:10px 14px calc(10px + env(safe-area-inset-bottom));
+  }
+  .nav .inner{display:flex;gap:8px;width:100%;max-width:var(--maxw);}
+  .nav button{
+    flex:1;padding:11px;border-radius:14px;
+    font-size:14px;font-weight:600;color:var(--muted);
+    display:flex;align-items:center;justify-content:center;gap:8px;
+  }
+  .nav button.active{background:var(--surface);color:var(--ink);border:1px solid var(--line);}
+  .nav svg{width:18px;height:18px;}
+
+  /* Tag sheet */
+  .scrim{
+    position:fixed;inset:0;background:rgba(27,42,36,.35);
+    display:none;align-items:flex-end;justify-content:center;z-index:20;
+  }
+  .scrim.show{display:flex;}
+  .sheet{
+    background:var(--paper);width:100%;max-width:var(--maxw);
+    border-radius:24px 24px 0 0;padding:20px 18px calc(24px + env(safe-area-inset-bottom));
+    animation:rise .25s ease;
+  }
+  @keyframes rise{from{transform:translateY(40px);opacity:.4;}to{transform:translateY(0);opacity:1;}}
+  .sheet h3{font-family:"Fraunces",serif;font-weight:500;margin:0 0 14px;font-size:18px;}
+  .opt{
+    width:100%;display:flex;align-items:center;gap:12px;
+    padding:13px 12px;border-radius:14px;font-size:16px;text-align:left;
+  }
+  .opt:active{background:var(--surface);}
+  .opt .dot{width:11px;height:11px;border-radius:50%;}
+
+  @media (prefers-reduced-motion: reduce){
+    *{animation:none !important;transition:none !important;}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="topbar">
+    <div class="wordmark">Mind<span class="drop">Spill</span></div>
+    <div class="hint">get it out of your head</div>
+  </div>
+
+  <!-- CAPTURE -->
+  <section class="view active" id="view-capture">
+    <div class="capture">
+      <div class="prompt">What is spilling around in your head?</div>
+      <div class="field">
+        <textarea id="entry" placeholder="Type it, or tap the mic and just talk."></textarea>
+        <div class="interim" id="interim"></div>
+      </div>
+      <div class="capture-actions">
+        <button class="mic" id="mic" aria-label="Tap to talk">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
+        </button>
+        <div class="mic-label" id="micLabel"><strong>Tap to talk</strong>or just start typing</div>
+        <button class="save" id="save" disabled>Spill it</button>
+      </div>
+      <div class="voice-note" id="voiceNote"></div>
+    </div>
+  </section>
+
+  <!-- STREAM -->
+  <section class="view" id="view-stream">
+    <div class="stream">
+      <div class="stream-head">
+        <h2>Mind Spill</h2>
+        <span class="count" id="streamCount"></span>
+      </div>
+      <div class="chips" id="chips"></div>
+      <div class="cards" id="cards"></div>
+    </div>
+  </section>
+
+  <!-- NAV -->
+  <nav class="nav">
+    <div class="inner">
+      <button id="nav-capture" class="active" onclick="go('capture')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+        Capture
+      </button>
+      <button id="nav-stream" onclick="go('stream')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+        Mind Spill
+      </button>
+    </div>
+  </nav>
+</div>
+
+<!-- TAG SHEET -->
+<div class="scrim" id="scrim" onclick="closeSheet(event)">
+  <div class="sheet" id="sheet">
+    <h3>Sort this thought</h3>
+    <div id="sheetOpts"></div>
+  </div>
+</div>
+
+<script>
+/* ---------- Buckets ---------- */
+const BUCKETS = [
+  {key:"todo",        label:"To Do",          color:"#E07A56"},
+  {key:"inspiration", label:"Inspiration",    color:"#A593CC"},
+  {key:"plan",        label:"Plan",           color:"#5FA7BC"},
+  {key:"forward",     label:"Moving Forward", color:"#6FB587"},
+  {key:"win",         label:"Win",            color:"#D9A24E"},
+];
+const bucketOf = k => BUCKETS.find(b => b.key === k);
+
+/* ---------- On-device sorter ----------
+   Transparent keyword scoring. Picks the strongest bucket.
+   If nothing is strong enough, it leaves the thought untagged
+   on purpose, because a wrong tag is worse than no tag. */
+const RULES = {
+  todo:        ["need to","have to","must ","remember to","don't forget","dont forget","buy ","call ","email ","text ","send ","finish ","pay ","book ","schedule","reply","todo","to-do","task","pick up","fix ","submit","return "],
+  plan:        ["plan","strategy","first ","then ","step ","roadmap","next week","next month","by friday","by monday","outline","approach","timeline","prepare","organize the","map out"],
+  inspiration: ["idea","what if","imagine","inspired","concept","vision","dream","i could","we could","new feature","build a","create a","story about","design a"],
+  forward:     ["i feel","i felt","i realized","i realised","i want to be","from now on","going forward","i should","i'm going to","im going to","let go","i learned","i need to stop","note to self","reminder to myself","i keep"],
+  win:         ["did it","got it done","finished","completed","i won","so proud","proud of","achieved","nailed it","success","passed","landed","grateful","celebrate","big win","closed the","got the job","accepted"],
+};
+function classify(text){
+  const t = " " + text.toLowerCase() + " ";
+  let best = null, bestScore = 0;
+  for(const b of BUCKETS){
+    const words = RULES[b.key] || [];
+    let score = 0;
+    for(const w of words){ if(t.includes(w)) score++; }
+    if(score > bestScore){ bestScore = score; best = b.key; }
+  }
+  return bestScore >= 1 ? best : null;
+}
+
+/* ---------- Storage (persists when hosted, falls back in preview) ---------- */
+const KEY = "mindspill.entries.v1";
+let entries = [];
+let memFallback = false;
+function load(){
+  try{
+    const raw = localStorage.getItem(KEY);
+    entries = raw ? JSON.parse(raw) : [];
+  }catch(e){ memFallback = true; entries = []; }
+}
+function persist(){
+  if(memFallback) return;
+  try{ localStorage.setItem(KEY, JSON.stringify(entries)); }
+  catch(e){ memFallback = true; }
+}
+
+/* ---------- State ---------- */
+let filter = "all";
+let sheetId = null;
+
+/* ---------- Views ---------- */
+function go(name){
+  document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
+  document.getElementById("view-"+name).classList.add("active");
+  document.getElementById("nav-capture").classList.toggle("active", name==="capture");
+  document.getElementById("nav-stream").classList.toggle("active", name==="stream");
+  if(name==="stream") renderStream();
+  window.scrollTo(0,0);
+}
+
+/* ---------- Capture ---------- */
+const entryEl = document.getElementById("entry");
+const saveEl  = document.getElementById("save");
+entryEl.addEventListener("input", () => {
+  saveEl.disabled = entryEl.value.trim().length === 0;
+});
+saveEl.addEventListener("click", saveEntry);
+function saveEntry(){
+  const text = entryEl.value.trim();
+  if(!text) return;
+  const item = { id: Date.now()+"-"+Math.random().toString(36).slice(2,7), text, ts: Date.now(), tag: classify(text), done:false };
+  entries.unshift(item);
+  persist();
+  entryEl.value = "";
+  saveEl.disabled = true;
+  document.getElementById("interim").textContent = "";
+  stopListening();
+  go("stream");
+}
+
+/* ---------- Voice (Web Speech API) ---------- */
+const micEl = document.getElementById("mic");
+const micLabel = document.getElementById("micLabel");
+const interimEl = document.getElementById("interim");
+const voiceNote = document.getElementById("voiceNote");
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let rec = null, listening = false, baseText = "";
+
+if(!SR){
+  voiceNote.classList.add("show");
+  voiceNote.textContent = "Voice needs Chrome on a web address that starts with https. Typing works everywhere.";
+} else {
+  rec = new SR();
+  rec.continuous = true;
+  rec.interimResults = true;
+  rec.lang = "en-US";
+  rec.onresult = (e) => {
+    let interim = "", finalAdd = "";
+    for(let i=e.resultIndex;i<e.results.length;i++){
+      const tr = e.results[i][0].transcript;
+      if(e.results[i].isFinal) finalAdd += tr;
+      else interim += tr;
+    }
+    if(finalAdd){
+      baseText = (baseText + " " + finalAdd).trim();
+      entryEl.value = baseText;
+      saveEl.disabled = entryEl.value.trim().length === 0;
+    }
+    interimEl.textContent = interim;
+  };
+  rec.onerror = (e) => {
+    if(e.error === "no-speech" || e.error === "aborted"){ stopListening(); return; }
+    voiceNote.classList.add("show");
+    if(e.error === "not-allowed" || e.error === "service-not-allowed"){
+      voiceNote.textContent = "The microphone is blocked. Open the app from an https web link in Chrome, then tap Allow when it asks for the microphone.";
+    } else if(e.error === "network"){
+      voiceNote.textContent = "Voice could not connect. It needs an https web link and an internet connection. Typing still works.";
+    } else {
+      voiceNote.textContent = "Voice is not available here. Open the app from an https web link in Chrome. Typing still works.";
+    }
+    stopListening();
+  };
+  rec.onend = () => { if(listening){ try{ rec.start(); }catch(e){ stopListening(); } } };
+  micEl.addEventListener("click", () => listening ? stopListening() : startListening());
+}
+function startListening(){
+  if(!rec) return;
+  baseText = entryEl.value.trim();
+  try{ rec.start(); }catch(e){}
+  listening = true;
+  micEl.classList.add("listening");
+  micLabel.innerHTML = "<strong>Listening...</strong>tap again to stop";
+}
+function stopListening(){
+  listening = false;
+  micEl.classList.remove("listening");
+  micLabel.innerHTML = "<strong>Tap to talk</strong>or just start typing";
+  interimEl.textContent = "";
+  if(rec){ try{ rec.stop(); }catch(e){} }
+}
+
+/* ---------- Stream ---------- */
+function renderChips(){
+  const wrap = document.getElementById("chips");
+  const all = [{key:"all",label:"All",color:"#9DB0A4"}, ...BUCKETS];
+  wrap.innerHTML = all.map(b => `
+    <button class="chip ${filter===b.key?'active':''}" onclick="setFilter('${b.key}')">
+      <span class="dot" style="background:${b.color}"></span>${b.label}
+    </button>`).join("");
+}
+function setFilter(k){ filter = k; renderStream(); }
+
+function fmt(ts){
+  const d = new Date(ts), now = new Date();
+  const sameDay = d.toDateString() === now.toDateString();
+  const time = d.toLocaleTimeString([], {hour:"numeric",minute:"2-digit"});
+  if(sameDay) return "Today " + time;
+  return d.toLocaleDateString([], {month:"short",day:"numeric"}) + " " + time;
+}
+function esc(s){ return s.replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c])); }
+
+function renderStream(){
+  renderChips();
+  const list = filter==="all" ? entries : entries.filter(e => e.tag===filter);
+  document.getElementById("streamCount").textContent = entries.length ? entries.length + (entries.length===1?" thought":" thoughts") : "";
+  const cards = document.getElementById("cards");
+  if(!list.length){
+    cards.innerHTML = `<div class="empty"><div class="big">${entries.length? "Nothing sorted here yet." : "Your head is clear."}</div><div>${entries.length? "Try another filter." : "Spill your first thought from the Capture tab."}</div></div>`;
+    return;
+  }
+  cards.innerHTML = list.map(e => {
+    const b = bucketOf(e.tag);
+    const tag = b
+      ? `<button class="tag" style="color:${b.color};background:${b.color}26" onclick="openSheet('${e.id}')"><span class="dot" style="background:${b.color}"></span>${b.label}</button>`
+      : `<button class="tag" onclick="openSheet('${e.id}')"><span class="dot"></span>Add a tag</button>`;
+    const doneBtn = e.tag==="todo"
+      ? `<button class="iconbtn" title="Mark done" onclick="toggleDone('${e.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></button>`
+      : "";
+    return `<div class="card ${e.done?'done':''}">
+      <div class="meta"><span>${fmt(e.ts)}</span></div>
+      <div class="text">&ldquo;${esc(e.text)}&rdquo;</div>
+      <div class="row">
+        ${tag}
+        <div class="actions">
+          ${doneBtn}
+          <button class="iconbtn" title="Delete" onclick="del('${e.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg></button>
+        </div>
+      </div>
+    </div>`;
+  }).join("");
+}
+function toggleDone(id){ const e=entries.find(x=>x.id===id); if(e){ e.done=!e.done; persist(); renderStream(); } }
+function del(id){ entries = entries.filter(x=>x.id!==id); persist(); renderStream(); }
+
+/* ---------- Tag sheet ---------- */
+function openSheet(id){
+  sheetId = id;
+  const opts = document.getElementById("sheetOpts");
+  opts.innerHTML = BUCKETS.map(b => `
+    <button class="opt" onclick="setTag('${b.key}')"><span class="dot" style="background:${b.color}"></span>${b.label}</button>`).join("")
+    + `<button class="opt" onclick="setTag('')"><span class="dot" style="background:var(--muted)"></span>No tag</button>`;
+  document.getElementById("scrim").classList.add("show");
+}
+function setTag(key){
+  const e = entries.find(x=>x.id===sheetId);
+  if(e){ e.tag = key || null; persist(); }
+  closeSheet();
+  renderStream();
+}
+function closeSheet(ev){
+  if(ev && ev.target.closest(".sheet")) return;
+  document.getElementById("scrim").classList.remove("show");
+  sheetId = null;
+}
+
+/* ---------- Boot ---------- */
+load();
+renderChips();
+if(SR && location.protocol === "file:"){
+  voiceNote.classList.add("show");
+  voiceNote.textContent = "Voice is off because this page was opened as a downloaded file. Put it on an https web link and open that in Chrome to turn the microphone on. Typing works here.";
+}
+</script>
+</body>
+</html>

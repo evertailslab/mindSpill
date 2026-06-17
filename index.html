@@ -478,8 +478,8 @@ function setLang(code){
   // re-render options
   renderLangOptions();
   closeLangSheet();
-  // if currently listening, restart with new lang
-  if(listening){ stopListening(); startListening(); }
+  // restart with new lang if mic is active
+  if(listening){ stopListening(); setTimeout(startListening, 200); }
 }
 function renderLangOptions(){
   const list = document.getElementById("langList");
@@ -500,36 +500,36 @@ const interimEl = document.getElementById("interim");
 const voiceNote = document.getElementById("voiceNote");
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 
-// Track which result indices we've already committed to avoid duplicates
-let rec = null, listening = false, baseText = "", lastCommittedIndex = 0;
+let rec = null, listening = false;
+// committedText = what's been finalised; shown in textarea at all times
+// snapshotText  = what was in the textarea when mic was tapped
+let committedText = "", snapshotText = "";
 
 function buildRec(){
-  if(!SR) return null;
   const r = new SR();
-  r.continuous = true;
+  // continuous=false + interimResults=true on Android Chrome:
+  // gives ONE final result per utterance, no phantom repeats on restart
+  r.continuous = false;
   r.interimResults = true;
   r.lang = currentLang;
+
   r.onresult = (e) => {
     let interim = "";
-    for(let i = e.resultIndex; i < e.results.length; i++){
-      const tr = e.results[i][0].transcript;
+    for(let i = 0; i < e.results.length; i++){
       if(e.results[i].isFinal){
-        // Only append if this index is new (prevents double-append on Android restart)
-        if(i >= lastCommittedIndex){
-          baseText = (baseText + " " + tr).trim();
-          lastCommittedIndex = i + 1;
-        }
+        committedText = (committedText + " " + e.results[i][0].transcript).trim();
+        interim = "";
       } else {
-        interim += tr;
+        interim += e.results[i][0].transcript;
       }
     }
-    entryEl.value = baseText + (interim ? " " + interim : "");
-    saveEl.disabled = entryEl.value.trim().length === 0;
+    entryEl.value = committedText + (interim ? " " + interim : "");
+    saveEl.disabled = !entryEl.value.trim();
     interimEl.textContent = interim ? "…" + interim : "";
   };
+
   r.onerror = (e) => {
-    if(e.error === "no-speech") return; // ignore silences, keep listening
-    if(e.error === "aborted") return;
+    if(e.error === "no-speech" || e.error === "aborted") return;
     voiceNote.classList.add("show");
     if(e.error === "not-allowed" || e.error === "service-not-allowed"){
       voiceNote.textContent = "Microphone is blocked. Open the app over https in Chrome, then tap Allow.";
@@ -540,15 +540,17 @@ function buildRec(){
     }
     stopListening();
   };
-  // FIX: guard restart so we don't re-open while results are still arriving
+
+  // When one utterance ends, immediately start a new session if still listening.
+  // Because continuous=false each session is clean — no index bleed-over.
   r.onend = () => {
+    interimEl.textContent = "";
     if(!listening) return;
-    // Small delay lets any pending onresult fire before we restart
-    setTimeout(() => {
-      if(!listening) return;
-      try{ rec.start(); } catch(e){ stopListening(); }
-    }, 150);
+    // fresh recognizer each time = zero chance of replaying old results
+    rec = buildRec();
+    try{ rec.start(); } catch(_){ stopListening(); }
   };
+
   return r;
 }
 
@@ -556,31 +558,28 @@ if(!SR){
   voiceNote.classList.add("show");
   voiceNote.textContent = "Voice needs Chrome on an https link. Typing works everywhere.";
 } else {
-  rec = buildRec();
   micEl.addEventListener("click", () => listening ? stopListening() : startListening());
 }
 
 function startListening(){
   if(!SR) return;
-  // Always rebuild recognizer so lang change + fresh index tracking takes effect
-  if(rec){ try{ rec.stop(); }catch(e){} }
-  rec = buildRec();
-  baseText = entryEl.value.trim();
-  lastCommittedIndex = 0;
-  try{ rec.start(); }catch(e){ return; }
+  snapshotText  = entryEl.value.trim();
+  committedText = snapshotText;
   listening = true;
   micEl.classList.add("listening");
   micLabel.innerHTML = "<strong>Listening...</strong>tap again to stop";
+  rec = buildRec();
+  try{ rec.start(); } catch(_){ stopListening(); }
 }
+
 function stopListening(){
   listening = false;
+  if(rec){ try{ rec.stop(); }catch(_){} rec = null; }
   micEl.classList.remove("listening");
   micLabel.innerHTML = "<strong>Tap to talk</strong>or just start typing";
   interimEl.textContent = "";
-  // Sync textarea to clean baseText (drop any dangling interim)
-  entryEl.value = baseText;
-  saveEl.disabled = entryEl.value.trim().length === 0;
-  if(rec){ try{ rec.stop(); }catch(e){} }
+  entryEl.value = committedText;
+  saveEl.disabled = !entryEl.value.trim();
 }
 
 // Init lang UI

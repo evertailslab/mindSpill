@@ -154,6 +154,38 @@
   }
   .voice-note.show{display:block;}
 
+  /* Language selector */
+  .lang-btn{
+    display:flex;align-items:center;gap:6px;
+    font-size:12px;color:var(--muted);
+    background:var(--surface);border:1px solid var(--line);
+    border-radius:20px;padding:5px 10px;
+    transition:color .2s;
+  }
+  .lang-btn:hover{color:var(--ink);}
+  .lang-btn svg{width:14px;height:14px;flex-shrink:0;}
+  .lang-scrim{
+    position:fixed;inset:0;background:rgba(27,42,36,.35);
+    display:none;align-items:flex-end;justify-content:center;z-index:30;
+  }
+  .lang-scrim.show{display:flex;}
+  .lang-sheet{
+    background:var(--paper);width:100%;max-width:var(--maxw);
+    border-radius:24px 24px 0 0;padding:20px 18px calc(24px + env(safe-area-inset-bottom));
+    animation:rise .25s ease;max-height:70vh;overflow-y:auto;
+  }
+  .lang-sheet h3{font-family:"Fraunces",serif;font-weight:500;margin:0 0 14px;font-size:18px;}
+  .lang-opt{
+    width:100%;display:flex;align-items:center;justify-content:space-between;
+    padding:13px 12px;border-radius:14px;font-size:15px;text-align:left;
+  }
+  .lang-opt:active{background:var(--surface);}
+  .lang-opt .lang-name{display:flex;flex-direction:column;gap:2px;}
+  .lang-opt .lang-native{font-size:13px;color:var(--muted);}
+  .lang-opt .check{color:var(--forest);font-size:18px;display:none;}
+  .lang-opt.selected .check{display:block;}
+  .lang-opt.selected{color:var(--ink);}
+
   /* Stream */
   .stream{padding:14px 18px 0;flex:1;}
   .stream-head{
@@ -269,7 +301,10 @@
 <div class="app">
   <div class="topbar">
     <div class="wordmark">Mind<span class="drop">Spill</span></div>
-    <div class="hint">get it out of your head</div>
+    <button class="lang-btn" id="langBtn" onclick="openLangSheet()" aria-label="Choose language">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+      <span id="langLabel">EN</span>
+    </button>
   </div>
 
   <!-- CAPTURE -->
@@ -410,55 +445,129 @@ function saveEntry(){
   go("stream");
 }
 
+/* ---------- Language config ---------- */
+const LANGUAGES = [
+  { code:"en-US",  label:"EN", name:"English",    native:"English" },
+  { code:"ar-AE",  label:"AR", name:"Arabic",     native:"العربية" },
+  { code:"tl-PH",  label:"TL", name:"Tagalog",    native:"Tagalog" },
+  { code:"es-ES",  label:"ES", name:"Spanish",    native:"Español" },
+  { code:"fr-FR",  label:"FR", name:"French",     native:"Français" },
+  { code:"hi-IN",  label:"HI", name:"Hindi",      native:"हिन्दी" },
+  { code:"ur-PK",  label:"UR", name:"Urdu",       native:"اردو" },
+  { code:"zh-CN",  label:"ZH", name:"Chinese",    native:"中文" },
+];
+
+// Auto-detect from browser locale, fallback to en-US
+function detectLang(){
+  const bl = (navigator.language || "en-US").toLowerCase();
+  const match = LANGUAGES.find(l => bl.startsWith(l.code.split("-")[0].toLowerCase()));
+  return match ? match.code : "en-US";
+}
+let currentLang = detectLang();
+
+function openLangSheet(){
+  document.getElementById("langSheet").classList.add("show");
+}
+function closeLangSheet(){
+  document.getElementById("langSheet").classList.remove("show");
+}
+function setLang(code){
+  currentLang = code;
+  const l = LANGUAGES.find(x => x.code === code);
+  document.getElementById("langLabel").textContent = l.label;
+  // re-render options
+  renderLangOptions();
+  closeLangSheet();
+  // if currently listening, restart with new lang
+  if(listening){ stopListening(); startListening(); }
+}
+function renderLangOptions(){
+  const list = document.getElementById("langList");
+  list.innerHTML = LANGUAGES.map(l => `
+    <button class="lang-opt ${l.code===currentLang?'selected':''}" onclick="setLang('${l.code}')">
+      <span class="lang-name">
+        ${l.name}
+        <span class="lang-native">${l.native}</span>
+      </span>
+      <span class="check">✓</span>
+    </button>`).join("");
+}
+
 /* ---------- Voice (Web Speech API) ---------- */
 const micEl = document.getElementById("mic");
 const micLabel = document.getElementById("micLabel");
 const interimEl = document.getElementById("interim");
 const voiceNote = document.getElementById("voiceNote");
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-let rec = null, listening = false, baseText = "";
 
-if(!SR){
-  voiceNote.classList.add("show");
-  voiceNote.textContent = "Voice needs Chrome on a web address that starts with https. Typing works everywhere.";
-} else {
-  rec = new SR();
-  rec.continuous = true;
-  rec.interimResults = true;
-  rec.lang = "en-US";
-  rec.onresult = (e) => {
-    let interim = "", finalAdd = "";
-    for(let i=e.resultIndex;i<e.results.length;i++){
+// Track which result indices we've already committed to avoid duplicates
+let rec = null, listening = false, baseText = "", lastCommittedIndex = 0;
+
+function buildRec(){
+  if(!SR) return null;
+  const r = new SR();
+  r.continuous = true;
+  r.interimResults = true;
+  r.lang = currentLang;
+  r.onresult = (e) => {
+    let interim = "";
+    for(let i = e.resultIndex; i < e.results.length; i++){
       const tr = e.results[i][0].transcript;
-      if(e.results[i].isFinal) finalAdd += tr;
-      else interim += tr;
+      if(e.results[i].isFinal){
+        // Only append if this index is new (prevents double-append on Android restart)
+        if(i >= lastCommittedIndex){
+          baseText = (baseText + " " + tr).trim();
+          lastCommittedIndex = i + 1;
+        }
+      } else {
+        interim += tr;
+      }
     }
-    if(finalAdd){
-      baseText = (baseText + " " + finalAdd).trim();
-      entryEl.value = baseText;
-      saveEl.disabled = entryEl.value.trim().length === 0;
-    }
-    interimEl.textContent = interim;
+    entryEl.value = baseText + (interim ? " " + interim : "");
+    saveEl.disabled = entryEl.value.trim().length === 0;
+    interimEl.textContent = interim ? "…" + interim : "";
   };
-  rec.onerror = (e) => {
-    if(e.error === "no-speech" || e.error === "aborted"){ stopListening(); return; }
+  r.onerror = (e) => {
+    if(e.error === "no-speech") return; // ignore silences, keep listening
+    if(e.error === "aborted") return;
     voiceNote.classList.add("show");
     if(e.error === "not-allowed" || e.error === "service-not-allowed"){
-      voiceNote.textContent = "The microphone is blocked. Open the app from an https web link in Chrome, then tap Allow when it asks for the microphone.";
+      voiceNote.textContent = "Microphone is blocked. Open the app over https in Chrome, then tap Allow.";
     } else if(e.error === "network"){
-      voiceNote.textContent = "Voice could not connect. It needs an https web link and an internet connection. Typing still works.";
+      voiceNote.textContent = "Voice needs an internet connection. Typing still works.";
     } else {
-      voiceNote.textContent = "Voice is not available here. Open the app from an https web link in Chrome. Typing still works.";
+      voiceNote.textContent = "Voice isn't available here. Try Chrome over https. Typing still works.";
     }
     stopListening();
   };
-  rec.onend = () => { if(listening){ try{ rec.start(); }catch(e){ stopListening(); } } };
+  // FIX: guard restart so we don't re-open while results are still arriving
+  r.onend = () => {
+    if(!listening) return;
+    // Small delay lets any pending onresult fire before we restart
+    setTimeout(() => {
+      if(!listening) return;
+      try{ rec.start(); } catch(e){ stopListening(); }
+    }, 150);
+  };
+  return r;
+}
+
+if(!SR){
+  voiceNote.classList.add("show");
+  voiceNote.textContent = "Voice needs Chrome on an https link. Typing works everywhere.";
+} else {
+  rec = buildRec();
   micEl.addEventListener("click", () => listening ? stopListening() : startListening());
 }
+
 function startListening(){
-  if(!rec) return;
+  if(!SR) return;
+  // Always rebuild recognizer so lang change + fresh index tracking takes effect
+  if(rec){ try{ rec.stop(); }catch(e){} }
+  rec = buildRec();
   baseText = entryEl.value.trim();
-  try{ rec.start(); }catch(e){}
+  lastCommittedIndex = 0;
+  try{ rec.start(); }catch(e){ return; }
   listening = true;
   micEl.classList.add("listening");
   micLabel.innerHTML = "<strong>Listening...</strong>tap again to stop";
@@ -468,8 +577,18 @@ function stopListening(){
   micEl.classList.remove("listening");
   micLabel.innerHTML = "<strong>Tap to talk</strong>or just start typing";
   interimEl.textContent = "";
+  // Sync textarea to clean baseText (drop any dangling interim)
+  entryEl.value = baseText;
+  saveEl.disabled = entryEl.value.trim().length === 0;
   if(rec){ try{ rec.stop(); }catch(e){} }
 }
+
+// Init lang UI
+document.addEventListener("DOMContentLoaded", () => {
+  const l = LANGUAGES.find(x => x.code === currentLang);
+  if(l) document.getElementById("langLabel").textContent = l.label;
+  renderLangOptions();
+});
 
 /* ---------- Stream ---------- */
 function renderChips(){
@@ -553,5 +672,12 @@ if(SR && location.protocol === "file:"){
   voiceNote.textContent = "Voice is off because this page was opened as a downloaded file. Put it on an https web link and open that in Chrome to turn the microphone on. Typing works here.";
 }
 </script>
+<!-- Language picker sheet -->
+<div class="lang-scrim" id="langSheet" onclick="if(event.target===this)closeLangSheet()">
+  <div class="lang-sheet">
+    <h3>Choose language</h3>
+    <div id="langList"></div>
+  </div>
+</div>
 </body>
 </html>

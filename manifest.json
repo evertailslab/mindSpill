@@ -1,0 +1,26 @@
+{
+  "name": "MindSpill",
+  "short_name": "MindSpill",
+  "description": "Get it out of your head. A personal mind-dumping journal.",
+  "start_url": "/mindSpill/",
+  "scope": "/mindSpill/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#121A16",
+  "theme_color": "#121A16",
+  "lang": "en",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

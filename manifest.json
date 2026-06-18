@@ -1,4 +1,5 @@
 {
+  "id": "com.evertailslab.mindspill",
   "name": "MindSpill",
   "short_name": "MindSpill",
   "description": "Get it out of your head. A personal mind-dumping journal.",
@@ -9,6 +10,15 @@
   "background_color": "#121A16",
   "theme_color": "#121A16",
   "lang": "en",
+  "categories": ["productivity", "lifestyle"],
+  "screenshots": [
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "form_factor": "narrow"
+    }
+  ],
   "icons": [
     {
       "src": "icon-192.png",
